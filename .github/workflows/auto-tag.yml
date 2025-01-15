@@ -3,11 +3,12 @@ name: Auto Tag from pyproject.toml
 on:
   push:
     branches:
-      - main  # or whichever branch you want to watch
+      - main  # or whichever branch you want to tag from
 
 jobs:
   tag-from-pyproject:
     runs-on: ubuntu-latest
+
     steps:
       - name: Check out repository
         uses: actions/checkout@v3
@@ -15,40 +16,55 @@ jobs:
       - name: Set up Python
         uses: actions/setup-python@v4
         with:
-          python-version: "3.11"
+          python-version: "3.11"  # or your preferred version
 
       - name: Parse version from pyproject.toml
         id: get_version
         run: |
-          pip install tomli  # or 'tomllib' for 3.11+ (but 3.11 has it built in)
-          python -c "
-import tomli
+          # If you're on Python 3.11+, you can use `import tomllib`
+          # If on older Python, install tomli, or adjust accordingly
+          echo "Python version: $(python --version)"
 
-with open('pyproject.toml', 'rb') as f:
-    data = tomli.load(f)
+          python <<EOF > version.txt
+import sys
 
-# Adjust the lookup below if your 'pyproject.toml' format differs.
-version = data['project']['version']
-print(f'::set-output name=VERSION::{version}')
-"
-        shell: bash
+try:
+    import tomllib  # Python 3.11+
+except ImportError:
+    import subprocess
+    subprocess.run([sys.executable, "-m", "pip", "install", "tomli"], check=True)
+    import tomli as tomllib
 
-      # NOTE: set-output is deprecated, but still works in GitHub Actions.
-      # For the modern approach, you'd write to GITHUB_OUTPUT. Example:
-      #    echo 'VERSION=$version' >> $GITHUB_OUTPUT
+with open("pyproject.toml", "rb") as f:
+    data = tomllib.load(f)
 
-      - name: Create tag if not existing
+version = data["project"]["version"]
+print(version)
+EOF
+
+          VERSION=$(cat version.txt)
+          echo "VERSION=$VERSION"
+          # Modern way to set output in GitHub Actions:
+          echo "version=$VERSION" >> $GITHUB_OUTPUT
+
+      - name: Create and push tag if needed
         env:
-          VERSION: ${{ steps.get_version.outputs.VERSION }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          VERSION: ${{ steps.get_version.outputs.version }}
         run: |
           echo "Discovered version: $VERSION"
-          
+          if [ -z "$VERSION" ]; then
+            echo "No version found in pyproject.toml!"
+            exit 1
+          fi
+
           # Check if tag already exists
           if git rev-parse "v$VERSION" >/dev/null 2>&1; then
-            echo "Tag v$VERSION already exists. Skipping..."
+            echo "Tag v$VERSION already exists. Doing nothing."
           else
             git config user.name "github-actions[bot]"
             git config user.email "github-actions[bot]@users.noreply.github.com"
             git tag "v$VERSION"
             git push origin "v$VERSION"
             echo "Pushed tag v$VERSION"
+          fi

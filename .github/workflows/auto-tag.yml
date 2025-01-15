@@ -1,0 +1,54 @@
+name: Auto Tag from pyproject.toml
+
+on:
+  push:
+    branches:
+      - main  # or whichever branch you want to watch
+
+jobs:
+  tag-from-pyproject:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check out repository
+        uses: actions/checkout@v3
+
+      - name: Set up Python
+        uses: actions/setup-python@v4
+        with:
+          python-version: "3.11"
+
+      - name: Parse version from pyproject.toml
+        id: get_version
+        run: |
+          pip install tomli  # or 'tomllib' for 3.11+ (but 3.11 has it built in)
+          python -c "
+import tomli
+
+with open('pyproject.toml', 'rb') as f:
+    data = tomli.load(f)
+
+# Adjust the lookup below if your 'pyproject.toml' format differs.
+version = data['project']['version']
+print(f'::set-output name=VERSION::{version}')
+"
+        shell: bash
+
+      # NOTE: set-output is deprecated, but still works in GitHub Actions.
+      # For the modern approach, you'd write to GITHUB_OUTPUT. Example:
+      #    echo 'VERSION=$version' >> $GITHUB_OUTPUT
+
+      - name: Create tag if not existing
+        env:
+          VERSION: ${{ steps.get_version.outputs.VERSION }}
+        run: |
+          echo "Discovered version: $VERSION"
+          
+          # Check if tag already exists
+          if git rev-parse "v$VERSION" >/dev/null 2>&1; then
+            echo "Tag v$VERSION already exists. Skipping..."
+          else
+            git config user.name "github-actions[bot]"
+            git config user.email "github-actions[bot]@users.noreply.github.com"
+            git tag "v$VERSION"
+            git push origin "v$VERSION"
+            echo "Pushed tag v$VERSION"

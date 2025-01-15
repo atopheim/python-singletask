@@ -1,0 +1,7 @@
+[project]
+name = "python-singletask"
+version = "1.1.1"
+description = ""
+readme = "README.md"
+requires-python = ">=3.12"
+dependencies = []

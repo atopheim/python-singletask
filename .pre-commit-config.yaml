@@ -1,0 +1,10 @@
+repos:
+  - repo: local
+    hooks:
+      - id: my-custom-script
+        name: My Custom Script
+        entry: ./.precommit.py
+        language: python
+        pass_filenames: false  # we don't need file arguments
+        additional_dependencies:
+          - tomli
